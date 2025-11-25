@@ -74,6 +74,7 @@ function ChatUI:Init(opts)
     self.stickerSet = {}
     self.replyContext = nil
 
+    local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
     local screen = new("ScreenGui", {
         Name = "SorinGlobalChat",
         ResetOnSpawn = false,
@@ -83,10 +84,11 @@ function ChatUI:Init(opts)
     self.screen = screen
 
     local frame = new("Frame", {
-        Size = UDim2.new(0, 420, 0, 520),
-        Position = UDim2.new(0.5, -210, 0.35, -120),
+        Size = isMobile and UDim2.new(0.9, 0, 0, 420) or UDim2.new(0, 420, 0, 520),
+        Position = isMobile and UDim2.new(0.05, 0, 0.25, 0) or UDim2.new(0.5, -210, 0.35, -120),
         BackgroundColor3 = palette.bg,
         BorderSizePixel = 0,
+        Active = true,
     })
     corner(frame, 16)
     stroke(frame, Color3.fromRGB(60, 60, 90), 1, 0.4)
@@ -110,6 +112,7 @@ function ChatUI:Init(opts)
         Position = UDim2.new(0, 10, 0, 10),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
+        Active = true,
     })
     corner(header, 12)
     padding(header, 10)
@@ -268,6 +271,7 @@ function ChatUI:Init(opts)
         Visible = false,
     })
     replyBar.Parent = inputBar
+    self.replyBar = replyBar
 
     local replyCancel = new("TextButton", {
         Size = UDim2.new(0, 20, 0, 18),
@@ -280,6 +284,7 @@ function ChatUI:Init(opts)
         Visible = false,
     })
     replyCancel.Parent = inputBar
+    self.replyCancel = replyCancel
 
     local function updateSendState()
         local hasText = string.len(textBox.Text) > 0
@@ -323,23 +328,134 @@ function ChatUI:Init(opts)
         replyCancel.Visible = false
     end)
 
-    -- Sticker quick-send: send last seen sticker or first in set; if none, prefill pattern
-    stickerBtn.MouseButton1Click:Connect(function()
-        local anyId
+    -- Sticker picker modal
+    local stickerModal = new("Frame", {
+        Size = UDim2.new(0, 240, 0, 220),
+        Position = UDim2.new(0.5, -120, 0.5, -110),
+        BackgroundColor3 = palette.card,
+        BorderSizePixel = 0,
+        Visible = false,
+    })
+    corner(stickerModal, 12)
+    stroke(stickerModal, Color3.fromRGB(70, 70, 110), 1, 0.35)
+    stickerModal.Parent = screen
+
+    local stickerTitle = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -40, 0, 24),
+        Position = UDim2.new(0, 10, 0, 8),
+        Font = Enum.Font.GothamBold,
+        Text = "Stickers",
+        TextSize = 16,
+        TextColor3 = palette.text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    stickerTitle.Parent = stickerModal
+
+    local closeSticker = new("TextButton", {
+        Size = UDim2.new(0, 24, 0, 24),
+        Position = UDim2.new(1, -32, 0, 8),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = "X",
+        TextSize = 14,
+        TextColor3 = palette.subtext,
+    })
+    closeSticker.Parent = stickerModal
+
+    local stickerList = new("ScrollingFrame", {
+        Size = UDim2.new(1, -20, 0, 130),
+        Position = UDim2.new(0, 10, 0, 36),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollBarThickness = 6,
+    })
+    stickerList.Parent = stickerModal
+    local stickerLayout = new("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+    stickerLayout.Parent = stickerList
+    stickerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        stickerList.CanvasSize = UDim2.new(0, 0, 0, stickerLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    local addBox = new("TextBox", {
+        Size = UDim2.new(1, -90, 0, 28),
+        Position = UDim2.new(0, 10, 1, -34),
+        BackgroundColor3 = palette.bubble,
+        BorderSizePixel = 0,
+        Font = Enum.Font.Gotham,
+        PlaceholderText = "rbxassetid://123",
+        PlaceholderColor3 = palette.subtext,
+        Text = "",
+        TextSize = 12,
+        TextColor3 = palette.text,
+        ClearTextOnFocus = true,
+    })
+    corner(addBox, 8)
+    padding(addBox, 6)
+    addBox.Parent = stickerModal
+
+    local addBtn = new("TextButton", {
+        Size = UDim2.new(0, 60, 0, 28),
+        Position = UDim2.new(1, -70, 1, -34),
+        BackgroundColor3 = palette.accent,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "Add",
+        TextSize = 12,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+    })
+    corner(addBtn, 8)
+    gradient(addBtn)
+    addBtn.Parent = stickerModal
+
+    local function refreshStickers()
+        for _, child in ipairs(stickerList:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
         for id in pairs(self.stickerSet) do
-            anyId = id
-            break
+            local btn = new("TextButton", {
+                Size = UDim2.new(1, 0, 0, 32),
+                BackgroundColor3 = palette.bubble,
+                BorderSizePixel = 0,
+                Font = Enum.Font.Gotham,
+                Text = tostring(id),
+                TextSize = 12,
+                TextColor3 = palette.text,
+            })
+            corner(btn, 8)
+            stroke(btn, Color3.fromRGB(60, 60, 80), 1, 0.3)
+            btn.Parent = stickerList
+            btn.MouseButton1Click:Connect(function()
+                if self.callbacks.OnSend then
+                    self.callbacks.OnSend("[[sticker:" .. tostring(id) .. "]]")
+                end
+                stickerModal.Visible = false
+            end)
         end
-        if not anyId then
-            -- prefill pattern for user to edit
-            textBox.Text = "[[sticker:ID]]"
-            textBox:CaptureFocus()
-            updateSendState()
-            return
+    end
+
+    addBtn.MouseButton1Click:Connect(function()
+        local txt = (addBox.Text or ""):gsub("rbxassetid://", "")
+        local num = tonumber(txt)
+        if num then
+            self.stickerSet[num] = true
+            refreshStickers()
+            addBox.Text = ""
         end
-        if anyId and self.callbacks.OnSend then
-            self.callbacks.OnSend("[[sticker:" .. tostring(anyId) .. "]]")
-        end
+    end)
+    closeSticker.MouseButton1Click:Connect(function()
+        stickerModal.Visible = false
+    end)
+
+    stickerBtn.MouseButton1Click:Connect(function()
+        refreshStickers()
+        stickerModal.Visible = true
     end)
 
     self.textBox = textBox
@@ -576,6 +692,20 @@ function ChatUI:AddMessage(msg)
     })
     nameLbl.Parent = card
 
+    -- Date label (uses created_at timestamp)
+    local ts = msg.created_at or os.time()
+    local dateLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0, 80, 0, 16),
+        Position = UDim2.new(1, -90, 0, 0),
+        Font = Enum.Font.Gotham,
+        Text = os.date("%Y-%m-%d %H:%M", ts),
+        TextSize = 11,
+        TextColor3 = palette.subtext,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    dateLbl.Parent = card
+
     local replyBtn = new("TextButton", {
         Size = UDim2.new(0, 28, 0, 20),
         Position = UDim2.new(1, -70, 0, 0),
@@ -665,6 +795,36 @@ function ChatUI:AddMessage(msg)
     delBtn.MouseButton1Click:Connect(function()
         if self.callbacks.OnDelete then
             self.callbacks.OnDelete(id)
+        end
+    end)
+
+    replyBtn.MouseButton1Click:Connect(function()
+        self.replyContext = { id = id, name = displayName, preview = content }
+        if self.replyBar then
+            local preview = string.sub(content, 1, 40)
+            self.replyBar.Text = "Replying to " .. displayName .. (preview ~= "" and (": " .. preview) or "")
+            self.replyBar.Visible = true
+        end
+        if self.replyCancel then
+            self.replyCancel.Visible = true
+        end
+        if self.textBox then
+            self.textBox:CaptureFocus()
+        end
+    end)
+
+    replyBtn.MouseButton1Click:Connect(function()
+        self.replyContext = { id = id, name = displayName, preview = content }
+        if self.replyBar then
+            local preview = string.sub(content, 1, 40)
+            self.replyBar.Text = "Replying to " .. displayName .. (preview ~= "" and (": " .. preview) or "")
+            self.replyBar.Visible = true
+        end
+        if self.replyCancel then
+            self.replyCancel.Visible = true
+        end
+        if self.textBox then
+            self.textBox:CaptureFocus()
         end
     end)
 
