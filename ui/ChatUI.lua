@@ -65,6 +65,10 @@ local function stroke(parent, color, thickness, transparency)
     })
 end
 
+local function stickerImage(id)
+    return ("rbxthumb://type=Asset&id=%s&w=420&h=420"):format(tostring(id))
+end
+
 function ChatUI:Init(opts)
     self.callbacks = opts or {}
     self.messages = {}
@@ -75,6 +79,18 @@ function ChatUI:Init(opts)
     self.replyContext = nil
 
     local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+    local viewport = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize)
+        or Vector2.new(1920, 1080)
+    local width = math.clamp(
+        isMobile and math.floor(viewport.X * 0.92) or 460,
+        320,
+        viewport.X - 20
+    )
+    local height = math.clamp(
+        isMobile and math.floor(viewport.Y * 0.6) or 540,
+        320,
+        viewport.Y - 60
+    )
     local screen = new("ScreenGui", {
         Name = "SorinGlobalChat",
         ResetOnSpawn = false,
@@ -84,8 +100,8 @@ function ChatUI:Init(opts)
     self.screen = screen
 
     local frame = new("Frame", {
-        Size = isMobile and UDim2.new(0.9, 0, 0, 420) or UDim2.new(0, 420, 0, 520),
-        Position = isMobile and UDim2.new(0.05, 0, 0.25, 0) or UDim2.new(0.5, -210, 0.35, -120),
+        Size = UDim2.fromOffset(width, height),
+        Position = UDim2.fromOffset((viewport.X - width) / 2, (viewport.Y - height) / 2),
         BackgroundColor3 = palette.bg,
         BorderSizePixel = 0,
         Active = true,
@@ -105,6 +121,35 @@ function ChatUI:Init(opts)
         return UDim2.fromOffset(x, y)
     end
     frame.Position = clampToViewport(frame.Position)
+
+    local function resizeToViewport()
+        local cam = workspace.CurrentCamera
+        if not cam then
+            return
+        end
+        viewport = cam.ViewportSize
+        width = math.clamp(
+            isMobile and math.floor(viewport.X * 0.92) or 460,
+            320,
+            viewport.X - 20
+        )
+        height = math.clamp(
+            isMobile and math.floor(viewport.Y * 0.6) or 540,
+            320,
+            viewport.Y - 60
+        )
+        frame.Size = UDim2.fromOffset(width, height)
+        frame.Position = clampToViewport(frame.Position)
+    end
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resizeToViewport)
+    end
+    workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+        if workspace.CurrentCamera then
+            workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resizeToViewport)
+            resizeToViewport()
+        end
+    end)
 
     -- Header
     local header = new("Frame", {
@@ -225,6 +270,7 @@ function ChatUI:Init(opts)
         TextSize = 14,
         TextColor3 = palette.text,
         ClearTextOnFocus = false,
+        MultiLine = false,
     })
     corner(textBox, 10)
     padding(textBox, 8)
@@ -292,35 +338,49 @@ function ChatUI:Init(opts)
         sendBtn.BackgroundColor3 = hasText and palette.accent or Color3.fromRGB(60, 60, 80)
     end
 
-    sendBtn.MouseButton1Click:Connect(function()
-        local msg = textBox.Text
+    local function triggerSend()
+        local msg = (textBox.Text or "")
+        msg = msg:gsub("^%s+", ""):gsub("%s+$", "")
+        if msg == "" then
+            return
+        end
         textBox.Text = ""
         updateSendState()
+        if self.replyContext then
+            msg = ("[[reply:%s|%s]] %s"):format(self.replyContext.id, self.replyContext.name, msg)
+        end
         if self.callbacks.OnSend then
-            -- prefix reply marker if set
-            if self.replyContext then
-                msg = ("[[reply:%s|%s]] %s"):format(self.replyContext.id, self.replyContext.name, msg)
-            end
             self.callbacks.OnSend(msg)
         end
         self.replyContext = nil
         replyBar.Visible = false
         replyCancel.Visible = false
-    end)
+    end
+
+    sendBtn.MouseButton1Click:Connect(triggerSend)
 
     -- Enter to send (PC)
     textBox.FocusLost:Connect(function(enterPressed)
         if enterPressed then
-            sendBtn.MouseButton1Click:Fire()
+            triggerSend()
         end
     end)
-    textBox.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Keyboard and (input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter) then
-            sendBtn.MouseButton1Click:Fire()
+    UserInputService.InputBegan:Connect(function(input, gp)
+        if gp then
+            return
+        end
+        if not textBox:IsFocused() then
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.Keyboard
+            and (input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter)
+        then
+            triggerSend()
         end
     end)
 
     textBox:GetPropertyChangedSignal("Text"):Connect(updateSendState)
+    updateSendState()
 
     replyCancel.MouseButton1Click:Connect(function()
         self.replyContext = nil
@@ -331,7 +391,8 @@ function ChatUI:Init(opts)
     -- Sticker picker modal
     local stickerModal = new("Frame", {
         Size = UDim2.new(0, 240, 0, 220),
-        Position = UDim2.new(0.5, -120, 0.5, -110),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
         Visible = false,
@@ -418,19 +479,45 @@ function ChatUI:Init(opts)
                 child:Destroy()
             end
         end
+        local ids = {}
         for id in pairs(self.stickerSet) do
+            table.insert(ids, id)
+        end
+        table.sort(ids)
+        for _, id in ipairs(ids) do
             local btn = new("TextButton", {
-                Size = UDim2.new(1, 0, 0, 32),
+                Size = UDim2.new(1, 0, 0, 48),
                 BackgroundColor3 = palette.bubble,
                 BorderSizePixel = 0,
+                AutoButtonColor = true,
                 Font = Enum.Font.Gotham,
-                Text = tostring(id),
-                TextSize = 12,
-                TextColor3 = palette.text,
+                Text = "",
             })
             corner(btn, 8)
             stroke(btn, Color3.fromRGB(60, 60, 80), 1, 0.3)
             btn.Parent = stickerList
+
+            local preview = new("ImageLabel", {
+                Size = UDim2.new(0, 36, 0, 36),
+                Position = UDim2.new(0, 6, 0, 6),
+                BackgroundTransparency = 1,
+                Image = stickerImage(id),
+                ScaleType = Enum.ScaleType.Fit,
+            })
+            preview.Parent = btn
+
+            local label = new("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -56, 1, 0),
+                Position = UDim2.new(0, 52, 0, 0),
+                Font = Enum.Font.Gotham,
+                Text = "Sticker " .. tostring(id),
+                TextSize = 12,
+                TextColor3 = palette.text,
+                TextXAlignment = Enum.TextXAlignment.Left,
+            })
+            label.Parent = btn
+
             btn.MouseButton1Click:Connect(function()
                 if self.callbacks.OnSend then
                     self.callbacks.OnSend("[[sticker:" .. tostring(id) .. "]]")
@@ -531,9 +618,12 @@ function ChatUI:Init(opts)
     -- Drag handling (drag header to move)
     local dragging = false
     local dragOffset
+    local function toVector2(pos)
+        return Vector2.new(pos.X, pos.Y)
+    end
     local function beginDrag(input)
         dragging = true
-        dragOffset = frame.AbsolutePosition - input.Position
+        dragOffset = frame.AbsolutePosition - toVector2(input.Position)
     end
     local function endDrag()
         dragging = false
@@ -542,29 +632,31 @@ function ChatUI:Init(opts)
         if not dragging then
             return
         end
-        local pos = input.Position + dragOffset
+        local pos = toVector2(input.Position) + dragOffset
         frame.Position = clampToViewport(UDim2.fromOffset(pos.X, pos.Y))
     end
-    header.InputBegan:Connect(function(input)
+    local function handleInputBegan(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             beginDrag(input)
         end
-    end)
-    header.InputEnded:Connect(function(input)
+    end
+    local function handleInputEnded(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             endDrag()
         end
-    end)
-    header.InputChanged:Connect(function(input)
+    end
+    local function handleInputChanged(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             updateDrag(input)
         end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            updateDrag(input)
-        end
-    end)
+    end
+    header.InputBegan:Connect(handleInputBegan)
+    header.InputEnded:Connect(handleInputEnded)
+    header.InputChanged:Connect(handleInputChanged)
+    frame.InputBegan:Connect(handleInputBegan)
+    frame.InputEnded:Connect(handleInputEnded)
+    frame.InputChanged:Connect(handleInputChanged)
+    UserInputService.InputChanged:Connect(handleInputChanged)
 
     -- Tab switching
     local function setTab(tab)
@@ -610,6 +702,7 @@ local function parseContent(raw)
     local text = raw or ""
     local stickerId = text:match("%[%[sticker:(%d+)]]")
     if stickerId then
+        stickerId = tonumber(stickerId)
         text = text:gsub("%[%[sticker:%d+]]", "", 1)
     end
     local replyId, replyName = text:match("%[%[reply:([^|]+)|([^%]]+)]%]")
@@ -756,7 +849,7 @@ function ChatUI:AddMessage(msg)
             Size = UDim2.new(0, 72, 0, 72),
             Position = UDim2.new(0, 0, 0, yOffset),
             BackgroundTransparency = 1,
-            Image = "rbxassetid://" .. tostring(parsed.stickerId),
+            Image = stickerImage(parsed.stickerId),
             ScaleType = Enum.ScaleType.Fit,
         })
         sticker.Parent = bubble
@@ -804,35 +897,6 @@ function ChatUI:AddMessage(msg)
             local preview = string.sub(content, 1, 40)
             self.replyBar.Text = "Replying to " .. displayName .. (preview ~= "" and (": " .. preview) or "")
             self.replyBar.Visible = true
-        end
-        if self.replyCancel then
-            self.replyCancel.Visible = true
-        end
-        if self.textBox then
-            self.textBox:CaptureFocus()
-        end
-    end)
-
-    replyBtn.MouseButton1Click:Connect(function()
-        self.replyContext = { id = id, name = displayName, preview = content }
-        if self.replyBar then
-            local preview = string.sub(content, 1, 40)
-            self.replyBar.Text = "Replying to " .. displayName .. (preview ~= "" and (": " .. preview) or "")
-            self.replyBar.Visible = true
-        end
-        if self.replyCancel then
-            self.replyCancel.Visible = true
-        end
-        if self.textBox then
-            self.textBox:CaptureFocus()
-        end
-    end)
-
-    replyBtn.MouseButton1Click:Connect(function()
-        self.replyContext = { id = id, name = displayName }
-        if self.replyBar then
-            self.replyBar.Visible = true
-            self.replyBar.Text = "Replying to " .. displayName
         end
         if self.replyCancel then
             self.replyCancel.Visible = true
