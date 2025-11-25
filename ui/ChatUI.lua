@@ -792,7 +792,7 @@ function ChatUI:AddMessage(msg)
 
     local card = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
-        Size = UDim2.new(1, 0, 0, 84),
+        Size = UDim2.new(1, 0, 0, 100),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
         LayoutOrder = msg.created_at or os.time(),
@@ -814,7 +814,7 @@ function ChatUI:AddMessage(msg)
 
     local nameLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -160, 0, 18),
+        Size = UDim2.new(1, -140, 0, 18),
         Position = UDim2.new(0, 56, 0, 2),
         Font = Enum.Font.GothamBold,
         Text = displayName .. "  |  " .. gameName,
@@ -829,8 +829,8 @@ function ChatUI:AddMessage(msg)
     local ts = msg.created_at or os.time()
     local dateLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 90, 0, 16),
-        Position = UDim2.new(1, -96, 0, 2),
+        Size = UDim2.new(0, 120, 0, 16),
+        Position = UDim2.new(1, -124, 0, 2),
         Font = Enum.Font.Gotham,
         Text = os.date("%Y-%m-%d %H:%M", ts),
         TextSize = 11,
@@ -840,8 +840,8 @@ function ChatUI:AddMessage(msg)
     dateLbl.Parent = card
 
     local replyBtn = new("TextButton", {
-        Size = UDim2.new(0, 28, 0, 20),
-        Position = UDim2.new(1, -70, 0, 2),
+        Size = UDim2.new(0, 50, 0, 20),
+        Position = UDim2.new(1, -120, 0, 24),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = "Reply",
@@ -853,7 +853,7 @@ function ChatUI:AddMessage(msg)
     local bubble = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
         Size = UDim2.new(1, -120, 0, 32),
-        Position = UDim2.new(0, 56, 0, 30),
+        Position = UDim2.new(0, 56, 0, 48),
         BackgroundColor3 = palette.bubble,
         BorderSizePixel = 0,
     })
@@ -922,7 +922,7 @@ function ChatUI:AddMessage(msg)
 
     local delBtn = new("TextButton", {
         Size = UDim2.new(0, 32, 0, 32),
-        Position = UDim2.new(1, -42, 0, 0),
+        Position = UDim2.new(1, -42, 0, 22),
         BackgroundColor3 = Color3.fromRGB(30, 20, 30),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
