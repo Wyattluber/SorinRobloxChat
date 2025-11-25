@@ -2,7 +2,9 @@
 -- Dark + purple gradient styling, Material-inspired.
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 local ChatUI = {}
@@ -64,6 +66,7 @@ end
 function ChatUI:Init(opts)
     self.callbacks = opts or {}
     self.messages = {}
+    self.collapsed = false
 
     local screen = new("ScreenGui", {
         Name = "SorinGlobalChat",
@@ -120,6 +123,21 @@ function ChatUI:Init(opts)
     })
     status.Parent = header
     self.status = status
+
+    -- Toggle button (collapse/expand, helpful on mobile)
+    local toggleBtn = new("TextButton", {
+        Size = UDim2.new(0, 28, 0, 28),
+        Position = UDim2.new(1, -34, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(32, 32, 44),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "⇕",
+        TextSize = 14,
+        TextColor3 = palette.text,
+    })
+    corner(toggleBtn, 8)
+    stroke(toggleBtn, Color3.fromRGB(70, 70, 110), 1, 0.3)
+    toggleBtn.Parent = header
 
     -- Messages container
     local listHolder = new("Frame", {
@@ -201,6 +219,60 @@ function ChatUI:Init(opts)
     end)
 
     self.textBox = textBox
+
+    -- Drag handling (drag header to move)
+    local dragging = false
+    local dragStart, startPos
+    local function updateDrag(input)
+        if not dragging then
+            return
+        end
+        local delta = input.Position - dragStart
+        local newPos = UDim2.new(
+            0,
+            math.clamp(startPos.X.Offset + delta.X, -frame.AbsoluteSize.X + 40, workspace.CurrentCamera.ViewportSize.X - 40),
+            0,
+            math.clamp(startPos.Y.Offset + delta.Y, 0, workspace.CurrentCamera.ViewportSize.Y - 40)
+        )
+        frame.Position = newPos
+    end
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function(i)
+                if i.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            updateDrag(input)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            updateDrag(input)
+        end
+    end)
+
+    -- Collapse/expand
+    toggleBtn.MouseButton1Click:Connect(function()
+        self.collapsed = not self.collapsed
+        local targetSize = self.collapsed and UDim2.new(0, 300, 0, 72) or UDim2.new(0, 460, 0, 520)
+        local targetPos = self.collapsed and UDim2.new(1, -320, 0, 40) or frame.Position
+        TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Size = targetSize,
+            Position = targetPos,
+        }):Play()
+        listHolder.Visible = not self.collapsed
+        inputBar.Visible = not self.collapsed
+        status.Visible = not self.collapsed
+    end)
+
     return self
 end
 
@@ -216,7 +288,7 @@ function ChatUI:AddMessage(msg)
         return
     end
     local id = msg.id or HttpService:GenerateGUID(false)
-    local userId = msg.user_id or 0
+    local userId = tonumber(msg.roblox_user_id) or msg.user_id or 0
     local username = msg.username or ("User_" .. tostring(userId))
     local content = msg.content or ""
     local gameName = msg.game_name or ("Place " .. tostring(msg.place_id or "?"))
