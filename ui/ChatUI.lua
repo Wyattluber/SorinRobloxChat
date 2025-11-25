@@ -67,6 +67,8 @@ function ChatUI:Init(opts)
     self.callbacks = opts or {}
     self.messages = {}
     self.collapsed = false
+    self.currentTab = "chat"
+    self.onlineSet = {}
 
     local screen = new("ScreenGui", {
         Name = "SorinGlobalChat",
@@ -89,7 +91,7 @@ function ChatUI:Init(opts)
 
     -- Header
     local header = new("Frame", {
-        Size = UDim2.new(1, -20, 0, 56),
+        Size = UDim2.new(1, -20, 0, 64),
         Position = UDim2.new(0, 10, 0, 10),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
@@ -101,7 +103,7 @@ function ChatUI:Init(opts)
 
     local title = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -40, 1, 0),
+        Size = UDim2.new(1, -120, 0, 22),
         Position = UDim2.new(0, 8, 0, 0),
         Font = Enum.Font.GothamBold,
         Text = "Sorin Global Chat",
@@ -113,7 +115,7 @@ function ChatUI:Init(opts)
 
     local status = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -40, 1, 0),
+        Size = UDim2.new(1, -120, 0, 18),
         Position = UDim2.new(0, 8, 0, 20),
         Font = Enum.Font.Gotham,
         Text = "Connecting...",
@@ -124,20 +126,34 @@ function ChatUI:Init(opts)
     status.Parent = header
     self.status = status
 
-    -- Toggle button (collapse/expand, helpful on mobile)
-    local toggleBtn = new("TextButton", {
-        Size = UDim2.new(0, 28, 0, 28),
-        Position = UDim2.new(1, -34, 0, 4),
+    -- Tabs
+    local tabChat = new("TextButton", {
+        Size = UDim2.new(0, 60, 0, 28),
+        Position = UDim2.new(1, -140, 0, 4),
         BackgroundColor3 = Color3.fromRGB(32, 32, 44),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
-        Text = "⇕",
-        TextSize = 14,
+        Text = "Chat",
+        TextSize = 12,
         TextColor3 = palette.text,
     })
-    corner(toggleBtn, 8)
-    stroke(toggleBtn, Color3.fromRGB(70, 70, 110), 1, 0.3)
-    toggleBtn.Parent = header
+    corner(tabChat, 8)
+    stroke(tabChat, Color3.fromRGB(70, 70, 110), 1, 0.25)
+    tabChat.Parent = header
+
+    local tabHome = new("TextButton", {
+        Size = UDim2.new(0, 60, 0, 28),
+        Position = UDim2.new(1, -74, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(32, 32, 44),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "Home",
+        TextSize = 12,
+        TextColor3 = palette.subtext,
+    })
+    corner(tabHome, 8)
+    stroke(tabHome, Color3.fromRGB(70, 70, 110), 1, 0.25)
+    tabHome.Parent = header
 
     -- Messages container
     local listHolder = new("Frame", {
@@ -219,33 +235,83 @@ function ChatUI:Init(opts)
     end)
 
     self.textBox = textBox
+    self.listHolder = listHolder
+    self.inputBar = inputBar
+
+    -- Home tab content
+    local homeFrame = new("Frame", {
+        Size = UDim2.new(1, -20, 1, -100),
+        Position = UDim2.new(0, 10, 0, 72),
+        BackgroundTransparency = 1,
+        Visible = false,
+    })
+    homeFrame.Parent = frame
+
+    local homeTitle = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 26),
+        Position = UDim2.new(0, 0, 0, 0),
+        Font = Enum.Font.GothamBold,
+        Text = "Welcome",
+        TextSize = 16,
+        TextColor3 = palette.text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    homeTitle.Parent = homeFrame
+
+    local homeBody = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 80),
+        Position = UDim2.new(0, 0, 0, 28),
+        Font = Enum.Font.Gotham,
+        Text = (opts and opts.HomeText) or "Credits: SorinSoftware\nRules: Be kind. No spam.",
+        TextSize = 14,
+        TextColor3 = palette.subtext,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        TextWrapped = true,
+    })
+    homeBody.Parent = homeFrame
+
+    local onlineLbl = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 20),
+        Position = UDim2.new(0, 0, 0, 114),
+        Font = Enum.Font.GothamBold,
+        Text = "Online: …",
+        TextSize = 14,
+        TextColor3 = palette.text,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    onlineLbl.Parent = homeFrame
+    self.onlineLbl = onlineLbl
+    self.homeFrame = homeFrame
 
     -- Drag handling (drag header to move)
     local dragging = false
-    local dragStart, startPos
+    local dragOffset
+    local function beginDrag(input)
+        dragging = true
+        dragOffset = frame.AbsolutePosition - input.Position
+    end
+    local function endDrag()
+        dragging = false
+    end
     local function updateDrag(input)
         if not dragging then
             return
         end
-        local delta = input.Position - dragStart
-        local newPos = UDim2.new(
-            0,
-            math.clamp(startPos.X.Offset + delta.X, -frame.AbsoluteSize.X + 40, workspace.CurrentCamera.ViewportSize.X - 40),
-            0,
-            math.clamp(startPos.Y.Offset + delta.Y, 0, workspace.CurrentCamera.ViewportSize.Y - 40)
-        )
-        frame.Position = newPos
+        local pos = input.Position + dragOffset
+        frame.Position = UDim2.fromOffset(pos.X, pos.Y)
     end
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-            input.Changed:Connect(function(i)
-                if i.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+            beginDrag(input)
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            endDrag()
         end
     end)
     header.InputChanged:Connect(function(input)
@@ -259,18 +325,22 @@ function ChatUI:Init(opts)
         end
     end)
 
-    -- Collapse/expand
-    toggleBtn.MouseButton1Click:Connect(function()
-        self.collapsed = not self.collapsed
-        local targetSize = self.collapsed and UDim2.new(0, 300, 0, 72) or UDim2.new(0, 460, 0, 520)
-        local targetPos = self.collapsed and UDim2.new(1, -320, 0, 40) or frame.Position
-        TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Size = targetSize,
-            Position = targetPos,
-        }):Play()
-        listHolder.Visible = not self.collapsed
-        inputBar.Visible = not self.collapsed
-        status.Visible = not self.collapsed
+    -- Tab switching
+    local function setTab(tab)
+        self.currentTab = tab
+        local isHome = tab == "home"
+        homeFrame.Visible = isHome
+        listHolder.Visible = not isHome and not self.collapsed
+        inputBar.Visible = not isHome and not self.collapsed
+        status.Visible = not isHome
+        tabChat.TextColor3 = isHome and palette.subtext or palette.text
+        tabHome.TextColor3 = isHome and palette.text or palette.subtext
+    end
+    tabChat.MouseButton1Click:Connect(function()
+        setTab("chat")
+    end)
+    tabHome.MouseButton1Click:Connect(function()
+        setTab("home")
     end)
 
     return self
@@ -293,6 +363,16 @@ function ChatUI:AddMessage(msg)
     local content = msg.content or ""
     local gameName = msg.game_name or ("Place " .. tostring(msg.place_id or "?"))
     local isDeleted = msg.is_deleted
+    if userId then
+        self.onlineSet[userId] = true
+        if self.onlineLbl then
+            local count = 0
+            for _ in pairs(self.onlineSet) do
+                count += 1
+            end
+            self.onlineLbl.Text = "Online: " .. tostring(count)
+        end
+    end
 
     if self.messages[id] then
         -- update text if needed
@@ -306,7 +386,8 @@ function ChatUI:AddMessage(msg)
     end
 
     local card = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 96),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 0, 80),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
         LayoutOrder = msg.created_at or os.time(),
