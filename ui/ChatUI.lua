@@ -19,6 +19,7 @@ local palette = {
     text = Color3.fromRGB(235, 235, 245),
     subtext = Color3.fromRGB(180, 180, 200),
     danger = Color3.fromRGB(255, 90, 120),
+    bubble = Color3.fromRGB(18, 18, 28),
 }
 
 local function new(instance, props)
@@ -69,6 +70,8 @@ function ChatUI:Init(opts)
     self.collapsed = false
     self.currentTab = "chat"
     self.onlineSet = {}
+    self.stickerSet = {}
+    self.replyContext = nil
 
     local screen = new("ScreenGui", {
         Name = "SorinGlobalChat",
@@ -79,8 +82,8 @@ function ChatUI:Init(opts)
     self.screen = screen
 
     local frame = new("Frame", {
-        Size = UDim2.new(0, 460, 0, 520),
-        Position = UDim2.new(1, -480, 0, 40),
+        Size = UDim2.new(0, 420, 0, 520),
+        Position = UDim2.new(1, -440, 0, 40),
         BackgroundColor3 = palette.bg,
         BorderSizePixel = 0,
     })
@@ -128,8 +131,8 @@ function ChatUI:Init(opts)
 
     -- Tabs
     local tabChat = new("TextButton", {
-        Size = UDim2.new(0, 60, 0, 28),
-        Position = UDim2.new(1, -140, 0, 4),
+        Size = UDim2.new(0, 64, 0, 28),
+        Position = UDim2.new(1, -148, 0, 4),
         BackgroundColor3 = Color3.fromRGB(32, 32, 44),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
@@ -142,8 +145,8 @@ function ChatUI:Init(opts)
     tabChat.Parent = header
 
     local tabHome = new("TextButton", {
-        Size = UDim2.new(0, 60, 0, 28),
-        Position = UDim2.new(1, -74, 0, 4),
+        Size = UDim2.new(0, 64, 0, 28),
+        Position = UDim2.new(1, -78, 0, 4),
         BackgroundColor3 = Color3.fromRGB(32, 32, 44),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
@@ -212,25 +215,110 @@ function ChatUI:Init(opts)
     padding(textBox, 8)
     textBox.Parent = inputBar
 
+    local stickerBtn = new("TextButton", {
+        Size = UDim2.new(0, 36, 1, 0),
+        Position = UDim2.new(1, -136, 0, 0),
+        BackgroundColor3 = Color3.fromRGB(40, 40, 55),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "🎟",
+        TextSize = 16,
+        TextColor3 = palette.text,
+    })
+    corner(stickerBtn, 10)
+    stroke(stickerBtn, Color3.fromRGB(70, 70, 110), 1, 0.25)
+    stickerBtn.Parent = inputBar
+
     local sendBtn = new("TextButton", {
-        Size = UDim2.new(0, 100, 1, 0),
-        Position = UDim2.new(1, -100, 0, 0),
-        BackgroundColor3 = palette.accent,
+        Size = UDim2.new(0, 92, 1, 0),
+        Position = UDim2.new(1, -92, 0, 0),
+        BackgroundColor3 = Color3.fromRGB(60, 60, 80),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
         Text = "SEND",
         TextSize = 14,
-        TextColor3 = Color3.fromRGB(250, 250, 255),
+        TextColor3 = Color3.fromRGB(180, 180, 200),
     })
     corner(sendBtn, 10)
     gradient(sendBtn)
     sendBtn.Parent = inputBar
 
+    -- Reply indicator
+    local replyBar = new("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -10, 0, 18),
+        Position = UDim2.new(0, 5, 0, -18),
+        Font = Enum.Font.Gotham,
+        Text = "",
+        TextSize = 12,
+        TextColor3 = palette.subtext,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Visible = false,
+    })
+    replyBar.Parent = inputBar
+
+    local replyCancel = new("TextButton", {
+        Size = UDim2.new(0, 20, 0, 18),
+        Position = UDim2.new(1, -24, 0, -18),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = "✕",
+        TextSize = 12,
+        TextColor3 = palette.subtext,
+        Visible = false,
+    })
+    replyCancel.Parent = inputBar
+
+    local function updateSendState()
+        local hasText = string.len(textBox.Text) > 0
+        sendBtn.TextColor3 = hasText and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 200)
+        sendBtn.BackgroundColor3 = hasText and palette.accent or Color3.fromRGB(60, 60, 80)
+    end
+
     sendBtn.MouseButton1Click:Connect(function()
         local msg = textBox.Text
         textBox.Text = ""
+        updateSendState()
         if self.callbacks.OnSend then
+            -- prefix reply marker if set
+            if self.replyContext then
+                msg = ("[[reply:%s|%s]] %s"):format(self.replyContext.id, self.replyContext.name, msg)
+            end
             self.callbacks.OnSend(msg)
+        end
+        self.replyContext = nil
+        replyBar.Visible = false
+        replyCancel.Visible = false
+    end)
+
+    -- Enter to send (PC)
+    textBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            sendBtn.MouseButton1Click:Fire()
+        end
+    end)
+
+    textBox:GetPropertyChangedSignal("Text"):Connect(updateSendState)
+
+    replyCancel.MouseButton1Click:Connect(function()
+        self.replyContext = nil
+        replyBar.Visible = false
+        replyCancel.Visible = false
+    end)
+
+    -- Sticker quick-send: send last seen sticker or first in set
+    stickerBtn.MouseButton1Click:Connect(function()
+        local anyId
+        for id in pairs(self.stickerSet) do
+            anyId = id
+            break
+        end
+        if not anyId then
+            -- no sticker known; do nothing
+            return
+        end
+        if self.callbacks.OnSend then
+            self.callbacks.OnSend("[[sticker:" .. tostring(anyId) .. "]]")
         end
     end)
 
@@ -264,7 +352,7 @@ function ChatUI:Init(opts)
         Size = UDim2.new(1, 0, 0, 80),
         Position = UDim2.new(0, 0, 0, 28),
         Font = Enum.Font.Gotham,
-        Text = (opts and opts.HomeText) or "Credits: SorinSoftware\nRules: Be kind. No spam.",
+        Text = (opts and opts.HomeText) or "Credits: SorinSoftware\nRules:\n1) Kein Spam/Flame\n2) Kein NSFW\n3) Keine Dox/Drohung\n4) Folge Roblox TOS",
         TextSize = 14,
         TextColor3 = palette.subtext,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -286,6 +374,22 @@ function ChatUI:Init(opts)
     onlineLbl.Parent = homeFrame
     self.onlineLbl = onlineLbl
     self.homeFrame = homeFrame
+
+    -- Accept rules button (simple local flag)
+    local acceptBtn = new("TextButton", {
+        Size = UDim2.new(0, 140, 0, 32),
+        Position = UDim2.new(0, 0, 0, 138),
+        BackgroundColor3 = palette.accent,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "Regeln akzeptieren",
+        TextSize = 13,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+    })
+    corner(acceptBtn, 8)
+    gradient(acceptBtn)
+    acceptBtn.Parent = homeFrame
+    self.acceptBtn = acceptBtn
 
     -- Drag handling (drag header to move)
     local dragging = false
@@ -335,6 +439,9 @@ function ChatUI:Init(opts)
         status.Visible = not isHome
         tabChat.TextColor3 = isHome and palette.subtext or palette.text
         tabHome.TextColor3 = isHome and palette.text or palette.subtext
+        if isHome and self.acceptBtn then
+            self.acceptBtn.Visible = not self:GetAcceptedRules()
+        end
     end
     tabChat.MouseButton1Click:Connect(function()
         setTab("chat")
@@ -343,6 +450,8 @@ function ChatUI:Init(opts)
         setTab("home")
     end)
 
+    -- init rules accept handler
+    self:InitRules()
     return self
 end
 
@@ -353,14 +462,33 @@ local function avatarHeadshot(userId)
     return content
 end
 
+local function parseContent(raw)
+    local text = raw or ""
+    local stickerId = text:match("%[%[sticker:(%d+)]]")
+    if stickerId then
+        text = text:gsub("%[%[sticker:%d+]]", "", 1)
+    end
+    local replyId, replyName = text:match("%[%[reply:([^|]+)|([^%]]+)]%]")
+    if replyId then
+        text = text:gsub("%[%[reply:[^|]+|[^%]]+]%]", "", 1)
+    end
+    text = text:gsub("^%s+", "")
+    return {
+        text = text,
+        stickerId = stickerId,
+        reply = replyId and { id = replyId, name = replyName } or nil,
+    }
+end
+
 function ChatUI:AddMessage(msg)
     if not self.scrolling then
         return
     end
     local id = msg.id or HttpService:GenerateGUID(false)
     local userId = tonumber(msg.roblox_user_id) or msg.user_id or 0
-    local username = msg.username or ("User_" .. tostring(userId))
-    local content = msg.content or ""
+    local displayName = msg.username or msg.display_name or ("User_" .. tostring(userId))
+    local parsed = parseContent(msg.content or "")
+    local content = parsed.text
     local gameName = msg.game_name or ("Place " .. tostring(msg.place_id or "?"))
     local isDeleted = msg.is_deleted
     if userId then
@@ -387,7 +515,7 @@ function ChatUI:AddMessage(msg)
 
     local card = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
-        Size = UDim2.new(1, 0, 0, 80),
+        Size = UDim2.new(1, 0, 0, 72),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
         LayoutOrder = msg.created_at or os.time(),
@@ -398,43 +526,79 @@ function ChatUI:AddMessage(msg)
     card.Parent = self.scrolling
 
     local avatar = new("ImageLabel", {
-        Size = UDim2.new(0, 52, 0, 52),
-        Position = UDim2.new(0, 0, 0, 0),
-        BackgroundColor3 = Color3.fromRGB(18, 18, 28),
+        Size = UDim2.new(0, 44, 0, 44),
+        Position = UDim2.new(0, 0, 0, 4),
+        BackgroundColor3 = palette.bubble,
         BorderSizePixel = 0,
         Image = avatarHeadshot(userId),
     })
-    corner(avatar, 12)
+    corner(avatar, 10)
     avatar.Parent = card
 
     local nameLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -120, 0, 22),
-        Position = UDim2.new(0, 62, 0, 0),
+        Size = UDim2.new(1, -150, 0, 18),
+        Position = UDim2.new(0, 56, 0, 0),
         Font = Enum.Font.GothamBold,
-        Text = username,
-        TextSize = 15,
+        Text = displayName .. "  |  " .. gameName,
+        TextSize = 14,
         TextColor3 = palette.text,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
     })
     nameLbl.Parent = card
 
-    local meta = new("TextLabel", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -120, 0, 18),
-        Position = UDim2.new(0, 62, 0, 20),
-        Font = Enum.Font.Gotham,
-        Text = gameName,
-        TextSize = 12,
-        TextColor3 = palette.subtext,
-        TextXAlignment = Enum.TextXAlignment.Left,
+    local bubble = new("Frame", {
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, -120, 0, 32),
+        Position = UDim2.new(0, 56, 0, 20),
+        BackgroundColor3 = palette.bubble,
+        BorderSizePixel = 0,
     })
-    meta.Parent = card
+    corner(bubble, 10)
+    stroke(bubble, Color3.fromRGB(50, 50, 70), 1, 0.3)
+    padding(bubble, 8)
+    bubble.Parent = card
+
+    local yOffset = 0
+    if parsed.reply then
+        local replyFrame = new("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Size = UDim2.new(1, 0, 0, 22),
+            BackgroundTransparency = 1,
+        })
+        replyFrame.Parent = bubble
+        local replyLbl = new("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 18),
+            Font = Enum.Font.Gotham,
+            Text = "↩ Reply to " .. tostring(parsed.reply.name or "?"),
+            TextSize = 12,
+            TextColor3 = palette.subtext,
+            TextXAlignment = Enum.TextXAlignment.Left,
+        })
+        replyLbl.Parent = replyFrame
+        yOffset = 20
+    end
+
+    if parsed.stickerId then
+        self.stickerSet[parsed.stickerId] = true
+        local sticker = new("ImageLabel", {
+            Size = UDim2.new(0, 72, 0, 72),
+            Position = UDim2.new(0, 0, 0, yOffset),
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://" .. tostring(parsed.stickerId),
+            ScaleType = Enum.ScaleType.Fit,
+        })
+        sticker.Parent = bubble
+        yOffset = yOffset + 76
+    end
 
     local contentLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -120, 0, 24),
-        Position = UDim2.new(0, 62, 0, 38),
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Position = UDim2.new(0, 0, 0, yOffset),
         Font = Enum.Font.Gotham,
         Text = isDeleted and "[deleted]" or content,
         TextSize = 14,
@@ -442,7 +606,7 @@ function ChatUI:AddMessage(msg)
         TextXAlignment = Enum.TextXAlignment.Left,
         TextWrapped = true,
     })
-    contentLbl.Parent = card
+    contentLbl.Parent = bubble
 
     local delBtn = new("TextButton", {
         Size = UDim2.new(0, 32, 0, 32),
@@ -487,5 +651,42 @@ function ChatUI:SetStatus(text)
         self.status.Text = text
     end
 end
+
+-- Simple local flag (session-level) for rules acceptance
+function ChatUI:GetAcceptedRules()
+    if getgenv then
+        getgenv()._sorin_rules_ok = getgenv()._sorin_rules_ok or false
+        return getgenv()._sorin_rules_ok
+    end
+    return self._acceptedRules == true
+end
+
+function ChatUI:SetAcceptedRules()
+    if getgenv then
+        getgenv()._sorin_rules_ok = true
+    end
+    self._acceptedRules = true
+end
+
+function ChatUI:InitRules()
+    if self.acceptBtn then
+        self.acceptBtn.MouseButton1Click:Connect(function()
+            self:SetAcceptedRules()
+            self.acceptBtn.Visible = false
+            -- switch to chat
+            self.currentTab = "chat"
+            self.homeFrame.Visible = false
+            self.listHolder.Visible = true
+            self.inputBar.Visible = true
+            self.status.Visible = true
+        end)
+        -- hide button if already accepted
+        if self:GetAcceptedRules() then
+            self.acceptBtn.Visible = false
+        end
+    end
+end
+
+-- Call at end of Init setup
 
 return setmetatable({}, ChatUI)
