@@ -20,6 +20,7 @@ local palette = {
     subtext = Color3.fromRGB(180, 180, 200),
     danger = Color3.fromRGB(255, 90, 120),
     bubble = Color3.fromRGB(18, 18, 28),
+    disabled = Color3.fromRGB(80, 80, 90),
 }
 
 local function new(instance, props)
@@ -68,7 +69,7 @@ function ChatUI:Init(opts)
     self.callbacks = opts or {}
     self.messages = {}
     self.collapsed = false
-    self.currentTab = "chat"
+    self.currentTab = "home" -- start on Home; Chat locked until rules accepted
     self.onlineSet = {}
     self.stickerSet = {}
     self.replyContext = nil
@@ -83,7 +84,7 @@ function ChatUI:Init(opts)
 
     local frame = new("Frame", {
         Size = UDim2.new(0, 420, 0, 520),
-        Position = UDim2.new(1, -440, 0, 40),
+        Position = UDim2.new(0.5, -210, 0.35, -120),
         BackgroundColor3 = palette.bg,
         BorderSizePixel = 0,
     })
@@ -91,6 +92,17 @@ function ChatUI:Init(opts)
     stroke(frame, Color3.fromRGB(60, 60, 90), 1, 0.4)
     frame.Parent = screen
     self.frame = frame
+    local function clampToViewport(pos)
+        local cam = workspace.CurrentCamera
+        if not cam then
+            return pos
+        end
+        local size = cam.ViewportSize
+        local x = math.clamp(pos.X.Offset, 10, size.X - frame.AbsoluteSize.X - 10)
+        local y = math.clamp(pos.Y.Offset, 10, size.Y - 40)
+        return UDim2.fromOffset(x, y)
+    end
+    frame.Position = clampToViewport(frame.Position)
 
     -- Header
     local header = new("Frame", {
@@ -204,7 +216,7 @@ function ChatUI:Init(opts)
         BackgroundColor3 = Color3.fromRGB(18, 18, 28),
         BorderSizePixel = 0,
         Font = Enum.Font.Gotham,
-        PlaceholderText = "Schreibe eine Nachricht...",
+        PlaceholderText = "Type a message...",
         PlaceholderColor3 = palette.subtext,
         Text = "",
         TextSize = 14,
@@ -221,8 +233,8 @@ function ChatUI:Init(opts)
         BackgroundColor3 = Color3.fromRGB(40, 40, 55),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
-        Text = "🎟",
-        TextSize = 16,
+        Text = "Sticker",
+        TextSize = 12,
         TextColor3 = palette.text,
     })
     corner(stickerBtn, 10)
@@ -262,7 +274,7 @@ function ChatUI:Init(opts)
         Position = UDim2.new(1, -24, 0, -18),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
-        Text = "✕",
+        Text = "X",
         TextSize = 12,
         TextColor3 = palette.subtext,
         Visible = false,
@@ -297,6 +309,11 @@ function ChatUI:Init(opts)
             sendBtn.MouseButton1Click:Fire()
         end
     end)
+    textBox.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Keyboard and (input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter) then
+            sendBtn.MouseButton1Click:Fire()
+        end
+    end)
 
     textBox:GetPropertyChangedSignal("Text"):Connect(updateSendState)
 
@@ -306,7 +323,7 @@ function ChatUI:Init(opts)
         replyCancel.Visible = false
     end)
 
-    -- Sticker quick-send: send last seen sticker or first in set
+    -- Sticker quick-send: send last seen sticker or first in set; if none, prefill pattern
     stickerBtn.MouseButton1Click:Connect(function()
         local anyId
         for id in pairs(self.stickerSet) do
@@ -314,10 +331,13 @@ function ChatUI:Init(opts)
             break
         end
         if not anyId then
-            -- no sticker known; do nothing
+            -- prefill pattern for user to edit
+            textBox.Text = "[[sticker:ID]]"
+            textBox:CaptureFocus()
+            updateSendState()
             return
         end
-        if self.callbacks.OnSend then
+        if anyId and self.callbacks.OnSend then
             self.callbacks.OnSend("[[sticker:" .. tostring(anyId) .. "]]")
         end
     end)
@@ -352,7 +372,8 @@ function ChatUI:Init(opts)
         Size = UDim2.new(1, 0, 0, 80),
         Position = UDim2.new(0, 0, 0, 28),
         Font = Enum.Font.Gotham,
-        Text = (opts and opts.HomeText) or "Credits: SorinSoftware\nRules:\n1) Kein Spam/Flame\n2) Kein NSFW\n3) Keine Dox/Drohung\n4) Folge Roblox TOS",
+        Text = (opts and opts.HomeText)
+            or "Credits: SorinSoftware\nRules:\n1) Be kind. No spam/harassment.\n2) No NSFW.\n3) No dox/threats.\n4) Follow Roblox TOS.",
         TextSize = 14,
         TextColor3 = palette.subtext,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -366,7 +387,7 @@ function ChatUI:Init(opts)
         Size = UDim2.new(1, 0, 0, 20),
         Position = UDim2.new(0, 0, 0, 114),
         Font = Enum.Font.GothamBold,
-        Text = "Online: …",
+        Text = "Online: ...",
         TextSize = 14,
         TextColor3 = palette.text,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -377,12 +398,12 @@ function ChatUI:Init(opts)
 
     -- Accept rules button (simple local flag)
     local acceptBtn = new("TextButton", {
-        Size = UDim2.new(0, 140, 0, 32),
+        Size = UDim2.new(0, 160, 0, 32),
         Position = UDim2.new(0, 0, 0, 138),
         BackgroundColor3 = palette.accent,
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
-        Text = "Regeln akzeptieren",
+        Text = "Accept rules",
         TextSize = 13,
         TextColor3 = Color3.fromRGB(255, 255, 255),
     })
@@ -406,7 +427,7 @@ function ChatUI:Init(opts)
             return
         end
         local pos = input.Position + dragOffset
-        frame.Position = UDim2.fromOffset(pos.X, pos.Y)
+        frame.Position = clampToViewport(UDim2.fromOffset(pos.X, pos.Y))
     end
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -431,11 +452,16 @@ function ChatUI:Init(opts)
 
     -- Tab switching
     local function setTab(tab)
+        local needRules = not self:GetAcceptedRules()
+        if tab == "chat" and needRules then
+            -- force stay on home until accepted
+            tab = "home"
+        end
         self.currentTab = tab
         local isHome = tab == "home"
         homeFrame.Visible = isHome
-        listHolder.Visible = not isHome and not self.collapsed
-        inputBar.Visible = not isHome and not self.collapsed
+        listHolder.Visible = (not isHome) and not self.collapsed
+        inputBar.Visible = (not isHome) and not self.collapsed
         status.Visible = not isHome
         tabChat.TextColor3 = isHome and palette.subtext or palette.text
         tabHome.TextColor3 = isHome and palette.text or palette.subtext
@@ -449,6 +475,8 @@ function ChatUI:Init(opts)
     tabHome.MouseButton1Click:Connect(function()
         setTab("home")
     end)
+    -- initial enforce
+    setTab(self.currentTab)
 
     -- init rules accept handler
     self:InitRules()
@@ -537,7 +565,7 @@ function ChatUI:AddMessage(msg)
 
     local nameLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -150, 0, 18),
+        Size = UDim2.new(1, -190, 0, 18),
         Position = UDim2.new(0, 56, 0, 0),
         Font = Enum.Font.GothamBold,
         Text = displayName .. "  |  " .. gameName,
@@ -547,6 +575,17 @@ function ChatUI:AddMessage(msg)
         TextTruncate = Enum.TextTruncate.AtEnd,
     })
     nameLbl.Parent = card
+
+    local replyBtn = new("TextButton", {
+        Size = UDim2.new(0, 28, 0, 20),
+        Position = UDim2.new(1, -70, 0, 0),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = "<-",
+        TextSize = 12,
+        TextColor3 = palette.subtext,
+    })
+    replyBtn.Parent = card
 
     local bubble = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
@@ -572,7 +611,7 @@ function ChatUI:AddMessage(msg)
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 18),
             Font = Enum.Font.Gotham,
-            Text = "↩ Reply to " .. tostring(parsed.reply.name or "?"),
+            Text = "<- Reply to " .. tostring(parsed.reply.name or "?"),
             TextSize = 12,
             TextColor3 = palette.subtext,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -626,6 +665,20 @@ function ChatUI:AddMessage(msg)
     delBtn.MouseButton1Click:Connect(function()
         if self.callbacks.OnDelete then
             self.callbacks.OnDelete(id)
+        end
+    end)
+
+    replyBtn.MouseButton1Click:Connect(function()
+        self.replyContext = { id = id, name = displayName }
+        if self.replyBar then
+            self.replyBar.Visible = true
+            self.replyBar.Text = "Replying to " .. displayName
+        end
+        if self.replyCancel then
+            self.replyCancel.Visible = true
+        end
+        if self.textBox then
+            self.textBox:CaptureFocus()
         end
     end)
 
