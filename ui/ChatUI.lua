@@ -73,7 +73,7 @@ function ChatUI:Init(opts)
     self.callbacks = opts or {}
     self.messages = {}
     self.collapsed = false
-    self.currentTab = "home" -- start on Home; Chat locked until rules accepted
+    self.currentTab = self:GetAcceptedRules() and "chat" or "home"
     self.onlineSet = {}
     self.stickerSet = {}
     self.replyContext = nil
@@ -190,9 +190,23 @@ function ChatUI:Init(opts)
     self.status = status
 
     -- Tabs
+    local tabHome = new("TextButton", {
+        Size = UDim2.new(0, 64, 0, 28),
+        Position = UDim2.new(1, -212, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(32, 32, 44),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "Home",
+        TextSize = 12,
+        TextColor3 = palette.subtext,
+    })
+    corner(tabHome, 8)
+    stroke(tabHome, Color3.fromRGB(70, 70, 110), 1, 0.25)
+    tabHome.Parent = header
+
     local tabChat = new("TextButton", {
         Size = UDim2.new(0, 64, 0, 28),
-        Position = UDim2.new(1, -148, 0, 4),
+        Position = UDim2.new(1, -142, 0, 4),
         BackgroundColor3 = Color3.fromRGB(32, 32, 44),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
@@ -204,19 +218,33 @@ function ChatUI:Init(opts)
     stroke(tabChat, Color3.fromRGB(70, 70, 110), 1, 0.25)
     tabChat.Parent = header
 
-    local tabHome = new("TextButton", {
-        Size = UDim2.new(0, 64, 0, 28),
-        Position = UDim2.new(1, -78, 0, 4),
-        BackgroundColor3 = Color3.fromRGB(32, 32, 44),
+    local minimizeBtn = new("TextButton", {
+        Size = UDim2.new(0, 28, 0, 28),
+        Position = UDim2.new(1, -74, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(35, 35, 50),
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
-        Text = "Home",
-        TextSize = 12,
-        TextColor3 = palette.subtext,
+        Text = "-",
+        TextSize = 16,
+        TextColor3 = palette.text,
     })
-    corner(tabHome, 8)
-    stroke(tabHome, Color3.fromRGB(70, 70, 110), 1, 0.25)
-    tabHome.Parent = header
+    corner(minimizeBtn, 8)
+    stroke(minimizeBtn, Color3.fromRGB(70, 70, 110), 1, 0.25)
+    minimizeBtn.Parent = header
+
+    local closeBtn = new("TextButton", {
+        Size = UDim2.new(0, 28, 0, 28),
+        Position = UDim2.new(1, -40, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(50, 30, 40),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "X",
+        TextSize = 14,
+        TextColor3 = palette.danger,
+    })
+    corner(closeBtn, 8)
+    stroke(closeBtn, palette.danger, 1, 0.3)
+    closeBtn.Parent = header
 
     -- Messages container
     local listHolder = new("Frame", {
@@ -653,9 +681,6 @@ function ChatUI:Init(opts)
     header.InputBegan:Connect(handleInputBegan)
     header.InputEnded:Connect(handleInputEnded)
     header.InputChanged:Connect(handleInputChanged)
-    frame.InputBegan:Connect(handleInputBegan)
-    frame.InputEnded:Connect(handleInputEnded)
-    frame.InputChanged:Connect(handleInputChanged)
     UserInputService.InputChanged:Connect(handleInputChanged)
 
     -- Tab switching
@@ -677,11 +702,26 @@ function ChatUI:Init(opts)
             self.acceptBtn.Visible = not self:GetAcceptedRules()
         end
     end
+    self._setTab = setTab
+    local function setCollapsed(state)
+        self.collapsed = state == true
+        setTab(self.currentTab)
+        minimizeBtn.Text = self.collapsed and "+" or "-"
+    end
     tabChat.MouseButton1Click:Connect(function()
         setTab("chat")
     end)
     tabHome.MouseButton1Click:Connect(function()
         setTab("home")
+    end)
+    minimizeBtn.MouseButton1Click:Connect(function()
+        setCollapsed(not self.collapsed)
+    end)
+    closeBtn.MouseButton1Click:Connect(function()
+        if self.callbacks.OnClose then
+            self.callbacks.OnClose()
+        end
+        self:Destroy()
     end)
     -- initial enforce
     setTab(self.currentTab)
@@ -752,7 +792,7 @@ function ChatUI:AddMessage(msg)
 
     local card = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
-        Size = UDim2.new(1, 0, 0, 72),
+        Size = UDim2.new(1, 0, 0, 84),
         BackgroundColor3 = palette.card,
         BorderSizePixel = 0,
         LayoutOrder = msg.created_at or os.time(),
@@ -764,7 +804,7 @@ function ChatUI:AddMessage(msg)
 
     local avatar = new("ImageLabel", {
         Size = UDim2.new(0, 44, 0, 44),
-        Position = UDim2.new(0, 0, 0, 4),
+        Position = UDim2.new(0, 0, 0, 8),
         BackgroundColor3 = palette.bubble,
         BorderSizePixel = 0,
         Image = avatarHeadshot(userId),
@@ -774,8 +814,8 @@ function ChatUI:AddMessage(msg)
 
     local nameLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -190, 0, 18),
-        Position = UDim2.new(0, 56, 0, 0),
+        Size = UDim2.new(1, -160, 0, 18),
+        Position = UDim2.new(0, 56, 0, 2),
         Font = Enum.Font.GothamBold,
         Text = displayName .. "  |  " .. gameName,
         TextSize = 14,
@@ -789,8 +829,8 @@ function ChatUI:AddMessage(msg)
     local ts = msg.created_at or os.time()
     local dateLbl = new("TextLabel", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 80, 0, 16),
-        Position = UDim2.new(1, -90, 0, 0),
+        Size = UDim2.new(0, 90, 0, 16),
+        Position = UDim2.new(1, -96, 0, 2),
         Font = Enum.Font.Gotham,
         Text = os.date("%Y-%m-%d %H:%M", ts),
         TextSize = 11,
@@ -801,7 +841,7 @@ function ChatUI:AddMessage(msg)
 
     local replyBtn = new("TextButton", {
         Size = UDim2.new(0, 28, 0, 20),
-        Position = UDim2.new(1, -70, 0, 0),
+        Position = UDim2.new(1, -70, 0, 2),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = "<-",
@@ -813,7 +853,7 @@ function ChatUI:AddMessage(msg)
     local bubble = new("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
         Size = UDim2.new(1, -120, 0, 32),
-        Position = UDim2.new(0, 56, 0, 20),
+        Position = UDim2.new(0, 56, 0, 30),
         BackgroundColor3 = palette.bubble,
         BorderSizePixel = 0,
     })
@@ -824,22 +864,32 @@ function ChatUI:AddMessage(msg)
 
     local yOffset = 0
     if parsed.reply then
-        local replyFrame = new("Frame", {
+        local target = parsed.reply.id and self.messages[parsed.reply.id]
+        local snippet = target and target.content and target.content.Text
+        snippet = snippet and string.sub(snippet, 1, 40) or ""
+        local replyFrame = new("TextButton", {
             AutomaticSize = Enum.AutomaticSize.Y,
             Size = UDim2.new(1, 0, 0, 22),
             BackgroundTransparency = 1,
+            Text = "",
         })
         replyFrame.Parent = bubble
         local replyLbl = new("TextLabel", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 18),
             Font = Enum.Font.Gotham,
-            Text = "<- Reply to " .. tostring(parsed.reply.name or "?"),
+            Text = "<- Reply to " .. tostring(parsed.reply.name or "?") .. (snippet ~= "" and (" | " .. snippet) or ""),
             TextSize = 12,
             TextColor3 = palette.subtext,
             TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
         })
         replyLbl.Parent = replyFrame
+        replyFrame.MouseButton1Click:Connect(function()
+            if self.ScrollToMessage then
+                self:ScrollToMessage(parsed.reply.id)
+            end
+        end)
         yOffset = 20
     end
 
@@ -912,6 +962,27 @@ function ChatUI:AddMessage(msg)
     }
 end
 
+function ChatUI:ScrollToMessage(id)
+    if not id or not self.messages[id] or not self.scrolling then
+        return
+    end
+    local card = self.messages[id].card
+    if not card then
+        return
+    end
+    local targetY = card.AbsolutePosition.Y - self.scrolling.AbsolutePosition.Y
+    self.scrolling.CanvasPosition = Vector2.new(0, math.max(0, targetY - 10))
+    -- brief highlight to orient the player
+    local stroke = card:FindFirstChild("JumpStroke") or new("UIStroke", {
+        Name = "JumpStroke",
+        Color = palette.accent,
+        Thickness = 2,
+        Transparency = 0.15,
+        Parent = card,
+    })
+    TweenService:Create(stroke, TweenInfo.new(0.4), { Transparency = 0.8 }):Play()
+end
+
 function ChatUI:RemoveMessage(id)
     local record = self.messages[id]
     if not record then
@@ -938,11 +1009,20 @@ function ChatUI:GetAcceptedRules()
     return self._acceptedRules == true
 end
 
-function ChatUI:SetAcceptedRules()
+function ChatUI:SetAcceptedRules(state)
+    local value = state == nil and true or state
     if getgenv then
-        getgenv()._sorin_rules_ok = true
+        getgenv()._sorin_rules_ok = value == true
     end
-    self._acceptedRules = true
+    self._acceptedRules = value == true
+end
+
+function ChatUI:Destroy()
+    if self.screen then
+        self.screen:Destroy()
+    end
+    self.scrolling = nil
+    self.messages = {}
 end
 
 function ChatUI:InitRules()
@@ -950,12 +1030,19 @@ function ChatUI:InitRules()
         self.acceptBtn.MouseButton1Click:Connect(function()
             self:SetAcceptedRules()
             self.acceptBtn.Visible = false
+            if self.callbacks.OnAcceptRules then
+                self.callbacks.OnAcceptRules()
+            end
             -- switch to chat
             self.currentTab = "chat"
             self.homeFrame.Visible = false
             self.listHolder.Visible = true
             self.inputBar.Visible = true
             self.status.Visible = true
+            -- update tab visuals
+            if self._setTab then
+                self._setTab("chat")
+            end
         end)
         -- hide button if already accepted
         if self:GetAcceptedRules() then
