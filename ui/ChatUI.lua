@@ -844,8 +844,8 @@ function ChatUI:AddMessage(msg)
         Position = UDim2.new(1, -70, 0, 2),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
-        Text = "<-",
-        TextSize = 12,
+        Text = "Reply",
+        TextSize = 11,
         TextColor3 = palette.subtext,
     })
     replyBtn.Parent = card
