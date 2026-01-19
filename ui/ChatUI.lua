@@ -1,5 +1,4 @@
 -- Sorin Roblox Global Chat UI Library
--- Dark + purple gradient styling, Material-inspired.
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -10,7 +9,6 @@ local LocalPlayer = Players.LocalPlayer
 local ChatUI = {}
 ChatUI.__index = ChatUI
 
--- Simple color palette
 local palette = {
     bg = Color3.fromRGB(14, 14, 24),
     card = Color3.fromRGB(24, 24, 36),
@@ -151,7 +149,6 @@ function ChatUI:Init(opts)
         end
     end)
 
-    -- Header
     local header = new("Frame", {
         Size = UDim2.new(1, -20, 0, 64),
         Position = UDim2.new(0, 10, 0, 10),
@@ -274,7 +271,7 @@ function ChatUI:Init(opts)
         scrolling.CanvasPosition = Vector2.new(0, math.max(0, listLayout.AbsoluteContentSize.Y - scrolling.AbsoluteWindowSize.Y))
     end)
 
-    -- Input bar
+    -- Text input
     local inputBar = new("Frame", {
         Size = UDim2.new(1, -20, 0, 60),
         Position = UDim2.new(0, 10, 1, -70),
@@ -387,7 +384,6 @@ function ChatUI:Init(opts)
 
     sendBtn.MouseButton1Click:Connect(triggerSend)
 
-    -- Enter to send (PC)
     textBox.FocusLost:Connect(function(enterPressed)
         if enterPressed then
             triggerSend()
@@ -416,7 +412,7 @@ function ChatUI:Init(opts)
         replyCancel.Visible = false
     end)
 
-    -- Sticker picker modal
+    -- Sticker picker
     local stickerModal = new("Frame", {
         Size = UDim2.new(0, 240, 0, 220),
         Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -627,7 +623,7 @@ function ChatUI:Init(opts)
     self.onlineLbl = onlineLbl
     self.homeFrame = homeFrame
 
-    -- Accept rules button (simple local flag)
+    -- Accept rules button
     local acceptBtn = new("TextButton", {
         Size = UDim2.new(0, 160, 0, 32),
         Position = UDim2.new(0, 0, 0, 138),
@@ -643,7 +639,7 @@ function ChatUI:Init(opts)
     acceptBtn.Parent = homeFrame
     self.acceptBtn = acceptBtn
 
-    -- Drag handling (drag header to move)
+    -- Drag handling
     local dragging = false
     local dragOffset
     local function toVector2(pos)
@@ -683,11 +679,9 @@ function ChatUI:Init(opts)
     header.InputChanged:Connect(handleInputChanged)
     UserInputService.InputChanged:Connect(handleInputChanged)
 
-    -- Tab switching
     local function setTab(tab)
         local needRules = not self:GetAcceptedRules()
         if tab == "chat" and needRules then
-            -- force stay on home until accepted
             tab = "home"
         end
         self.currentTab = tab
@@ -723,10 +717,8 @@ function ChatUI:Init(opts)
         end
         self:Destroy()
     end)
-    -- initial enforce
+    
     setTab(self.currentTab)
-
-    -- init rules accept handler
     self:InitRules()
     return self
 end
@@ -780,7 +772,6 @@ function ChatUI:AddMessage(msg)
     end
 
     if self.messages[id] then
-        -- update text if needed
         local card = self.messages[id]
         if isDeleted then
             card.content.Text = "[deleted]"
@@ -825,7 +816,7 @@ function ChatUI:AddMessage(msg)
     })
     nameLbl.Parent = card
 
-    -- Date label (uses created_at timestamp)
+    -- Date label (created_at timestamp)
     local ts = msg.created_at or os.time()
     local dateLbl = new("TextLabel", {
         BackgroundTransparency = 1,
@@ -972,7 +963,7 @@ function ChatUI:ScrollToMessage(id)
     end
     local targetY = card.AbsolutePosition.Y - self.scrolling.AbsolutePosition.Y
     self.scrolling.CanvasPosition = Vector2.new(0, math.max(0, targetY - 10))
-    -- brief highlight to orient the player
+    
     local stroke = card:FindFirstChild("JumpStroke") or new("UIStroke", {
         Name = "JumpStroke",
         Color = palette.accent,
@@ -1000,7 +991,6 @@ function ChatUI:SetStatus(text)
     end
 end
 
--- Simple local flag (session-level) for rules acceptance
 function ChatUI:GetAcceptedRules()
     if getgenv then
         getgenv()._sorin_rules_ok = getgenv()._sorin_rules_ok or false
@@ -1033,7 +1023,6 @@ function ChatUI:InitRules()
             if self.callbacks.OnAcceptRules then
                 self.callbacks.OnAcceptRules()
             end
-            -- switch to chat
             self.currentTab = "chat"
             self.homeFrame.Visible = false
             self.listHolder.Visible = true
@@ -1044,13 +1033,11 @@ function ChatUI:InitRules()
                 self._setTab("chat")
             end
         end)
-        -- hide button if already accepted
+
         if self:GetAcceptedRules() then
             self.acceptBtn.Visible = false
         end
     end
 end
-
--- Call at end of Init setup
 
 return setmetatable({}, ChatUI)
