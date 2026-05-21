@@ -1,4 +1,3 @@
--- Sorin Roblox Global Chat UI Library
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -186,7 +185,6 @@ function ChatUI:Init(opts)
     status.Parent = header
     self.status = status
 
-    -- Tabs
     local tabHome = new("TextButton", {
         Size = UDim2.new(0, 64, 0, 28),
         Position = UDim2.new(1, -212, 0, 4),
@@ -243,7 +241,6 @@ function ChatUI:Init(opts)
     stroke(closeBtn, palette.danger, 1, 0.3)
     closeBtn.Parent = header
 
-    -- Messages container
     local listHolder = new("Frame", {
         Size = UDim2.new(1, -20, 1, -160),
         Position = UDim2.new(0, 10, 0, 76),
@@ -271,7 +268,6 @@ function ChatUI:Init(opts)
         scrolling.CanvasPosition = Vector2.new(0, math.max(0, listLayout.AbsoluteContentSize.Y - scrolling.AbsoluteWindowSize.Y))
     end)
 
-    -- Text input
     local inputBar = new("Frame", {
         Size = UDim2.new(1, -20, 0, 60),
         Position = UDim2.new(0, 10, 1, -70),
@@ -329,7 +325,6 @@ function ChatUI:Init(opts)
     gradient(sendBtn)
     sendBtn.Parent = inputBar
 
-    -- Reply indicator
     local replyBar = new("TextLabel", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, -10, 0, 18),
@@ -412,7 +407,6 @@ function ChatUI:Init(opts)
         replyCancel.Visible = false
     end)
 
-    -- Sticker picker
     local stickerModal = new("Frame", {
         Size = UDim2.new(0, 240, 0, 220),
         Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -573,7 +567,6 @@ function ChatUI:Init(opts)
     self.listHolder = listHolder
     self.inputBar = inputBar
 
-    -- Home tab content
     local homeFrame = new("Frame", {
         Size = UDim2.new(1, -20, 1, -100),
         Position = UDim2.new(0, 10, 0, 72),
@@ -623,7 +616,6 @@ function ChatUI:Init(opts)
     self.onlineLbl = onlineLbl
     self.homeFrame = homeFrame
 
-    -- Accept rules button
     local acceptBtn = new("TextButton", {
         Size = UDim2.new(0, 160, 0, 32),
         Position = UDim2.new(0, 0, 0, 138),
@@ -639,7 +631,6 @@ function ChatUI:Init(opts)
     acceptBtn.Parent = homeFrame
     self.acceptBtn = acceptBtn
 
-    -- Drag handling
     local dragging = false
     local dragOffset
     local function toVector2(pos)
@@ -816,7 +807,6 @@ function ChatUI:AddMessage(msg)
     })
     nameLbl.Parent = card
 
-    -- Date label (created_at timestamp)
     local ts = msg.created_at or os.time()
     local dateLbl = new("TextLabel", {
         BackgroundTransparency = 1,
@@ -1028,7 +1018,6 @@ function ChatUI:InitRules()
             self.listHolder.Visible = true
             self.inputBar.Visible = true
             self.status.Visible = true
-            -- update tab visuals
             if self._setTab then
                 self._setTab("chat")
             end
